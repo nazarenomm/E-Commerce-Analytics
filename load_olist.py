@@ -13,7 +13,7 @@ load_dotenv()
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 
-DATA_DIR = "data"
+DATA_DIR = "data/proc"
 CHUNK_SIZE = 500  # registros por batch
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -259,7 +259,7 @@ if __name__ == "__main__":
     load_product_categories()
     load_customers()
     load_sellers()
-    # load_geolocation()   # la cargamos despues en caso de ser necesaria
+    # load_geolocation()   # la cargamos despues en caso de ser necesaria porque tiene muchos registros
     load_products()
     load_orders()
     load_order_items()
