@@ -6,4 +6,5 @@
 6. decedí los gráficos y las páginas del dashboard
 7. creé las vistas necesarias (con ayuda de Claude para las más complejas, la IA está para eso, ayudar)
 8. creé el dashboard con streamlit (otra vez con ayuda de Claude, podría poner al principio que lo usé como asistente en el proyecto)
-9. 
+9. Deployment en streamlit cloud
+10. TODO: github actions para pegarla a supabase cada tanto y asi no pausar la db
