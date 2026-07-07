@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from utils.api import fetch_view
-import plotly.express as px
-import json
-from urllib.request import urlopen
 
+
+st.header("👥 Clientes")
 #%% RETENTION COHORTS
 st.subheader("📊 Retención por cohorte")
 
@@ -53,10 +51,19 @@ fig_cohort.update_layout(
 st.plotly_chart(fig_cohort, use_container_width=True)
 
 st.caption(
-    "Se omite el mes 0 (100% por definición, ya que es la cohorte completa en su mes de origen). "
-    "Las celdas vacías indican combinaciones cohorte/período sin datos observables: "
-    "el período aún no ocurrió dentro de la ventana del dataset, o ningún cliente de esa "
-    "cohorte volvió a comprar en ese mes."
+    "**Cómo leer este gráfico:** cada fila es una cohorte de clientes que hizo su "
+    "primera compra ese mes. Cada columna (Mes 1, Mes 2...) indica cuántos meses "
+    "pasaron desde esa primera compra. El color muestra qué porcentaje de la cohorte "
+    "original volvió a comprar en ese mes. Por ejemplo, la fila '2017-03' en la "
+    "columna 'Mes 2' responde: *de los clientes que compraron por primera vez en "
+    "marzo 2017, ¿qué % volvió a comprar en mayo 2017?*. "
+    "Las celdas en blanco son combinaciones sin datos: el período aún no ocurrió dentro "
+    "de la ventana del dataset, o nadie de esa cohorte volvió a comprar ese mes."
+)
+
+st.info(
+    "💡 **Insight**: la retención de clientes es muy baja, lo que sugiere que el negocio depende fuertemente de adquisición de clientes nuevos más que de recompra."
+    "Esta es un área de mejora clave para el crecimiento sostenible del negocio."
 )
 
 #%% RFM
@@ -149,15 +156,150 @@ st.caption(
     "Derecha: distribución absoluta de clientes por segmento."
 )
 
+#%% RFM 2
+st.subheader("🔍 Detalle de clientes por segmento (RFM)")
+
+segment_colors = {
+    "champions": "#2ca02c",
+    "loyal": "#1f77b4",
+    "promising": "#ff7f0e",
+    "at_risk": "#d62728",
+    "others": "#7f7f7f"
+}
+
+selected_segments = st.multiselect(
+    "Segmentos a visualizar",
+    options=list(segment_colors.keys()),
+    default=["at_risk", "loyal", "champions"],
+)
+
+df_selected = df_rfm[df_rfm["segment"].isin(selected_segments)]
+
+fig_detail = go.Figure()
+
+for segment in selected_segments:
+    df_seg = df_selected[df_selected["segment"] == segment]
+    if df_seg.empty:
+        continue
+
+    sizes = np.sqrt(df_seg["monetary"].clip(lower=0))
+    sizes_scaled = 4 + (sizes - sizes.min()) / (sizes.max() - sizes.min() + 1e-9) * 20
+
+    fig_detail.add_trace(go.Scatter(
+        x=df_seg["recency_days"],
+        y=df_seg["frequency"],
+        mode="markers",
+        name=segment,
+        marker=dict(
+            size=sizes_scaled,
+            color=segment_colors[segment],
+            opacity=0.35,
+            line=dict(width=0)
+        ),
+        hovertemplate=(
+            "Recency: %{x} días<br>"
+            "Frequency: %{y} compras<br>"
+            "Monetary: R$ %{marker.size:.0f}<br>"
+            f"Segmento: {segment}<extra></extra>"
+        )
+    ))
+
+fig_detail.update_layout(
+    xaxis_title="Recency (días desde última compra)",
+    yaxis_title="Frequency (cantidad de compras)",
+    height=500,
+    legend_title="Segmento"
+)
+
+st.plotly_chart(fig_detail, use_container_width=True)
+
+st.caption(
+    f"Mostrando {len(df_selected):,} clientes de los segmentos seleccionados. "
+    "El tamaño de cada punto representa el monto gastado (Monetary)."
+)
 #%% SELLERS
-st.subheader("🏆 Ranking de vendedores")
+st.header("🛍️ Vendedores")
 
 df_sellers = fetch_view("seller_rankings")
 
+st.subheader("📋 Top / Bottom vendedores")
+
+df_sellers_table = df_sellers.dropna(subset=["avg_review_score"]).copy()
+df_sellers_table["avg_revenue"] = df_sellers_table["total_revenue"] / df_sellers_table["total_orders"]
+
+with st.expander("🔍 Filtros"):
+    col_f1, col_f2 = st.columns(2)
+
+    with col_f1:
+        min_orders, max_orders = int(df_sellers_table["total_orders"].min()), int(df_sellers_table["total_orders"].max())
+        orders_range = st.slider(
+            "Cantidad de pedidos",
+            min_value=min_orders, max_value=max_orders,
+            value=(min_orders, max_orders)
+        )
+        min_rev, max_rev = float(df_sellers_table["total_revenue"].min()), float(df_sellers_table["total_revenue"].max())
+        revenue_range = st.slider(
+            "Revenue total (R$)",
+            min_value=min_rev, max_value=max_rev,
+            value=(min_rev, max_rev)
+        )
+
+    with col_f2:
+        review_range = st.slider(
+            "Review promedio",
+            min_value=1.0, max_value=5.0,
+            value=(1.0, 5.0), step=0.1
+        )
+
+df_sellers_filtered = df_sellers_table[
+    (df_sellers_table["total_orders"].between(*orders_range)) &
+    (df_sellers_table["total_revenue"].between(*revenue_range)) &
+    (df_sellers_table["avg_review_score"].between(*review_range))
+]
+
+col1, col2 = st.columns(2)
+with col1:
+    n_rows = st.selectbox("Cantidad a mostrar", options=[5, 10, 20, 50], index=1)
+with col2:
+    sort_metric = st.selectbox(
+        "Ordenar por",
+        options=["total_revenue", "total_orders", "avg_revenue", "avg_review_score"],
+        format_func=lambda x: {
+            "total_revenue": "Revenue total",
+            "total_orders": "Cantidad de pedidos",
+            "avg_revenue": "Revenue promedio",
+            "avg_review_score": "Review promedio"
+        }[x]
+    )
+
+view_mode = st.radio("Ver:", options=["Top", "Bottom"], horizontal=True)
+
+ascending = (view_mode == "Bottom")
+df_table = df_sellers_filtered.sort_values(sort_metric, ascending=ascending).head(n_rows)
+
+st.caption(f"Mostrando {len(df_table)} de {len(df_sellers_filtered)} vendedores filtrados (total sin filtrar: {len(df_sellers_table)}).")
+
+st.dataframe(
+    df_table[["seller_id", "total_orders", "total_revenue", "avg_revenue", "avg_review_score"]].rename(columns={
+        "seller_id": "Seller ID",
+        "total_orders": "Pedidos",
+        "total_revenue": "Revenue (R$)",
+        "avg_revenue": "Revenue promedio (R$)",
+        "avg_review_score": "Review promedio"
+    }),
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        "Revenue (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+        "Revenue promedio (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+        "Review promedio": st.column_config.NumberColumn(format="%.2f ⭐")
+    }
+)
+
+st.subheader("🏆 Ranking de vendedores")
+
 df_sellers_clean = df_sellers.dropna(subset=["avg_review_score"])
 sellers_sin_reviews = df_sellers["avg_review_score"].isna().sum()
-
-df_sellers_clean["log_revenue"] = np.log10(df_sellers_clean["total_revenue"].clip(lower=1))
 
 fig_sellers = go.Figure(go.Scatter(
     x=df_sellers_clean["total_orders"],
@@ -165,22 +307,17 @@ fig_sellers = go.Figure(go.Scatter(
     mode="markers",
     marker=dict(
         size=8,
-        color=df_sellers_clean["log_revenue"],
-        colorscale="RdBu",
+        color=df_sellers_clean["total_revenue"],
+        colorscale="thermal",
         showscale=True,
-        colorbar=dict(
-            title="Revenue (R$)",
-            tickvals=[1, 2, 3, 4, 5],
-            ticktext=["R$10", "R$100", "R$1K", "R$10K", "R$100K"]
-        ),
+        colorbar=dict(title="Revenue (R$)"),
         opacity=0.6,
         line=dict(width=0.5, color="white")
     ),
-    customdata=df_sellers_clean["total_revenue"],
     hovertemplate=(
         "Pedidos: %{x}<br>"
         "Review promedio: %{y:.2f}<br>"
-        "Revenue: R$ %{customdata:,.0f}<extra></extra>"
+        "Revenue: R$ %{marker.color:,.0f}<extra></extra>"
     )
 ))
 
