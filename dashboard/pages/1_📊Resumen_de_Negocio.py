@@ -2,15 +2,43 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from utils.api import fetch_view
+from utils.api import fetch_views, load_brazil_geojson, build_uf_name_map
 import plotly.express as px
-import json
-from urllib.request import urlopen
+
+st.header("📊 Resumen de negocio")
+#%% Load data
+data = fetch_views(["rolling_revenue_30d", "order_status_distribution", "revenue_by_category", "revenue_by_state"])
+
+df = data["rolling_revenue_30d"]
+df_status = data["order_status_distribution"]
+df_category = data["revenue_by_category"]
+df_state = data["revenue_by_state"]
+
+brazil_geojson = load_brazil_geojson()
+
+#%% KPI CARDS
+st.subheader("📌 Resumen general")
+
+total_revenue = df["revenue"].sum()
+total_orders = df_status["order_count"].sum()
+avg_ticket = total_revenue / total_orders if total_orders else 0
+delivered_pct = df_status.loc[df_status["status"] == "delivered", "order_count"].sum() / total_orders * 100
+
+col1, col2, col3, col4 = st.columns(4)
+with col1.container(border=True):
+    st.metric("Revenue total", f"R$ {total_revenue:,.0f}")
+
+with col2.container(border=True):
+    st.metric("Pedidos totales", f"{total_orders:,.0f}")
+
+with col3.container(border=True):
+    st.metric("Ticket promedio", f"R$ {avg_ticket:,.2f}")
+
+with col4.container(border=True):
+    st.metric("Tasa de entrega", f"{delivered_pct:.1f}%")
 
 #%% REVENUE — ROLLING 30 DAYS
 st.subheader("📈 Rolling Revenue 30 días")
-
-df = fetch_view("rolling_revenue_30d")
 df["day"] = pd.to_datetime(df["day"])
 
 min_date = df["day"].min().date()
@@ -62,7 +90,7 @@ fig.update_yaxes(title_text="% variación", secondary_y=True)
 st.plotly_chart(fig, use_container_width=True)
 
 st.info(
-    "💡 **Insight**: Se observa un patrón cíclico de picos y correcciones cada 3-4 meses "
+    "💡Se observa un patrón cíclico de picos y correcciones cada 3-4 meses "
     "(Dic 2017, May 2018, Ago 2018), con caídas de 30-40% inmediatamente después de cada pico. "
     "El pico de diciembre coincide con la temporada de fin de año, pero los picos de mayo y "
     "agosto no tienen una causa estacional obvia, podrían estar asociados a campañas "
@@ -113,8 +141,6 @@ st.plotly_chart(fig_yoy, use_container_width=True)
 #%% DISTRIBUTION OF ORDERS BY STATUS
 st.subheader("📦 Distribución de pedidos por status")
 
-df_status = fetch_view("order_status_distribution")
-
 exclude_delivered = st.checkbox("Excluir 'delivered' (ver solo estados minoritarios)", value=False)
 
 df_display = df_status[df_status["status"] != "delivered"] if exclude_delivered else df_status.copy()
@@ -145,14 +171,15 @@ st.caption(
 #%% TOP 15 CATEGORIES BY REVENUE
 st.subheader("🏷️ Top 15 categorías por revenue")
 
-df_category = fetch_view("revenue_by_category")
 df_category = df_category.sort_values("total_revenue", ascending=True)
+df_category_top = df_category.sort_values("total_revenue", ascending=False).head(15)
+df_category_top = df_category_top.sort_values("total_revenue", ascending=True)
 
 fig_category = go.Figure(go.Bar(
-    x=df_category["total_revenue"],
-    y=df_category["category"],
+    x=df_category_top["total_revenue"],
+    y=df_category_top["category"],
     orientation="h",
-    text=df_category["total_revenue"].apply(lambda x: f"R$ {x:,.0f}"),
+    text=df_category_top["total_revenue"].apply(lambda x: f"R$ {x:,.0f}"),
     textposition="outside",
     marker_color="#2ca02c"
 ))
@@ -169,15 +196,81 @@ st.plotly_chart(fig_category, use_container_width=True)
 st.caption(
     "Excluye pedidos 'canceled' y 'unavailable'. Revenue calculado sobre el precio de los items, no sobre el total pagado (que puede incluir flete y variar por forma de pago)."
 )
+#%% BOTTOM 15 CATEGORIES BY REVENUE
+st.subheader("🔻 Bottom 15 categorías por revenue")
 
-with st.expander("Ver tabla detallada (incluye precio promedio por item)"):
+df_bottom = df_category.sort_values("total_revenue", ascending=False).tail(15)
+df_bottom = df_bottom.sort_values("total_revenue", ascending=True)
+
+fig_bottom = go.Figure(go.Bar(
+    x=df_bottom["total_revenue"],
+    y=df_bottom["category"],
+    orientation="h",
+    text=df_bottom["total_revenue"].apply(lambda x: f"R$ {x:,.0f}"),
+    textposition="outside",
+    marker_color="#d62728"
+))
+
+fig_bottom.update_layout(
+    xaxis_title="Revenue total (R$)",
+    yaxis_title="",
+    margin=dict(l=200),
+    height=500
+)
+
+st.plotly_chart(fig_bottom, use_container_width=True)
+
+#%% PRECIO PROMEDIO VS REVIEW SCORE POR CATEGORÍA
+st.subheader("⭐ Precio promedio vs. calificación por categoría")
+
+df_scatter = df_category.dropna(subset=["avg_review_score"])
+
+fig_price_review = px.scatter(
+    df_scatter,
+    x="avg_item_price",
+    y="avg_review_score",
+    color="total_revenue",
+    color_continuous_scale="thermal",
+    opacity=0.7,
+    hover_name="category",
+    labels={
+        "avg_item_price": "Precio promedio (R$)",
+        "avg_review_score": "Review promedio (⭐)",
+        "order_count": "Cantidad de pedidos",
+        "total_revenue": "Revenue total (R$)"
+    },
+    size_max=40
+)
+
+fig_price_review.update_traces(
+    marker=dict(
+        size=10,
+        line=dict(width=1, color="DarkSlateGrey")
+    )
+)
+
+fig_price_review.update_layout(
+    yaxis=dict(range=[1, 5]),
+    height=550
+)
+
+st.plotly_chart(fig_price_review, use_container_width=True)
+
+st.caption(
+    "El review_score es a nivel de pedido, no de item: pedidos con múltiples categorías "
+    "distribuyen su calificación entre todas ellas. Interpretar como aproximación, no como "
+    "medición exacta de satisfacción por categoría."
+)
+#%% TABLA DE CATEGORÍAS
+with st.expander("Ver tabla detallada"):
     df_table = df_category.sort_values("total_revenue", ascending=False).reset_index(drop=True)
     st.dataframe(
         df_table.rename(columns={
             "category": "Categoría",
             "order_count": "Cantidad de pedidos",
             "total_revenue": "Revenue total (R$)",
-            "avg_item_price": "Precio promedio item (R$)"
+            "avg_item_price": "Precio promedio item (R$)",
+            "avg_review_score": "Review promedio (⭐)"
         }),
         use_container_width=True,
         hide_index=True
@@ -186,24 +279,8 @@ with st.expander("Ver tabla detallada (incluye precio promedio por item)"):
 #%% REVENUE BY STATE
 st.subheader("🗺️ Revenue por estado")
 
-@st.cache_data(ttl=86400)
-def load_brazil_geojson():
-    url = "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/brazil-states.geojson"
-    with urlopen(url) as response:
-        return json.load(response)
-    
-@st.cache_data(ttl=86400)
-def build_uf_name_map(geojson):
-    return {
-        feature["properties"]["sigla"]: feature["properties"]["name"]
-        for feature in geojson["features"]
-    }
-
-
-brazil_geojson = load_brazil_geojson()
 uf_to_name = build_uf_name_map(brazil_geojson)
 
-df_state = fetch_view("revenue_by_state")
 df_state["state_name"] = df_state["uf"].map(uf_to_name)
 
 metric_option = st.radio(

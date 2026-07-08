@@ -1,14 +1,20 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from utils.api import fetch_view
-
+from utils.api import fetch_views
 
 st.header("👥 Clientes")
+
+#%% LOAD DATA
+data = fetch_views(["retention_cohorts", "rfm_segments", "seller_rankings"])
+
+df_cohort = data["retention_cohorts"]
+df_rfm = data["rfm_segments"]
+df_sellers = data["seller_rankings"]
+
 #%% RETENTION COHORTS
 st.subheader("📊 Retención por cohorte")
 
-df_cohort = fetch_view("retention_cohorts")
 df_cohort["cohort_month"] = pd.to_datetime(df_cohort["cohort_month"]).dt.strftime("%Y-%m")
 
 max_period = st.slider(
@@ -18,8 +24,7 @@ max_period = st.slider(
     value=12
 )
 
-# Excluimos period_number=0: siempre es 100% por definición (no aporta info real)
-# y aplastaría la escala de color del resto de los valores
+# Excluimos period_number=0: siempre es 100% y no aporta información
 df_filtered = df_cohort[(df_cohort["period_number"] >= 1) & (df_cohort["period_number"] <= max_period)]
 
 pivot = df_filtered.pivot(
@@ -62,14 +67,12 @@ st.caption(
 )
 
 st.info(
-    "💡 **Insight**: la retención de clientes es muy baja, lo que sugiere que el negocio depende fuertemente de adquisición de clientes nuevos más que de recompra."
+    "💡 La retención de clientes es muy baja, lo que sugiere que el negocio depende fuertemente de adquisición de clientes nuevos más que de recompra."
     "Esta es un área de mejora clave para el crecimiento sostenible del negocio."
 )
 
 #%% RFM
 st.subheader("🎯 Segmentación RFM")
-
-df_rfm = fetch_view("rfm_segments")
 
 df_summary = df_rfm.groupby("segment").agg(
     avg_recency=("recency_days", "mean"),
@@ -219,8 +222,6 @@ st.caption(
 )
 #%% SELLERS
 st.header("🛍️ Vendedores")
-
-df_sellers = fetch_view("seller_rankings")
 
 st.subheader("📋 Top / Bottom vendedores")
 
