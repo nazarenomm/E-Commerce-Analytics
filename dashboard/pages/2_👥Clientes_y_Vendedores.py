@@ -39,7 +39,7 @@ fig_cohort = go.Figure(data=go.Heatmap(
     z=pivot.values,
     x=[f"Mes {i}" for i in pivot.columns],
     y=pivot.index,
-    colorscale="Blues",
+    colorscale="thermal",
     zmin=0,
     zmax=zmax_dynamic,
     hoverongaps=False,

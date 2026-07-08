@@ -91,7 +91,7 @@ st.plotly_chart(fig, use_container_width=True)
 
 st.info(
     "💡Se observa un patrón cíclico de picos y correcciones cada 3-4 meses "
-    "(Dic 2017, May 2018, Ago 2018), con caídas de 30-40% inmediatamente después de cada pico. "
+    "(Dic 2017, May 2018, Ago 2018), con caídas de 25-40% inmediatamente después de cada pico. "
     "El pico de diciembre coincide con la temporada de fin de año, pero los picos de mayo y "
     "agosto no tienen una causa estacional obvia, podrían estar asociados a campañas "
     "promocionales puntuales más que a estacionalidad del negocio."
@@ -285,7 +285,7 @@ df_state["state_name"] = df_state["uf"].map(uf_to_name)
 
 metric_option = st.radio(
     "Métrica:",
-    options=["Revenue total", "Valor de orden promedio"],
+    options=["Revenue total", "Ticket promedio"],
     horizontal=True
 )
 metric_col = "total_revenue" if metric_option == "Revenue total" else "avg_order_value"
