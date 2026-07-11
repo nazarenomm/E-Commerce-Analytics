@@ -2,7 +2,7 @@
 
 Dashboard de analítica de negocio construido sobre el [Brazilian E-Commerce Public Dataset (Olist)](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce), con foco en análisis de cohortes, segmentación de clientes (RFM), performance de vendedores y evolución de ingresos.
 
-> ⚠️ **Nota**: el dashboard está deployado en Streamlit Community Cloud (tier gratuito). Si la base de datos estuvo inactiva, el primer request puede tardar ~30 segundos en "despertar". Si ves un error de conexión, esperá unos segundos y recargá / hacé click en "Wake up".
+> ⚠️ **Nota**: el dashboard está deployado en Streamlit Community Cloud (tier gratuito). Si la base de datos estuvo inactiva, el primer request puede tardar ~30 segundos en "despertar". Si ves un mensaje del tipo "Zzzz: This app has gone to sleep due to inactivity", hacé click en "Yes, get this app back up!".
 
 🔗 **Demo en vivo**: [[streamlit](https://e-commerce-analytics-olist.streamlit.app/)]
 
